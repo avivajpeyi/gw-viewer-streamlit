@@ -81,3 +81,48 @@ fig, ax = plt.subplots()
 
 for det, ts in strains.items():
     # Welch median PSD from 32 s before event
+    ref = TimeSeries.fetch_open_data(det, t0 - psd_baseline, t0,
+                                     sample_rate=fs, cache=False)
+    psd_ref = ref.psd(fftlength=4, method="median")
+    f_ref = psd_ref.frequencies.value
+    asd_ref = np.sqrt(psd_ref.value)
+
+    # Periodogram from ±0.5 s Tukey-windowed data
+    short = crop(ts)
+    y = short.value * tukey(len(short.value), 0.25)
+    f_per, Pxx = welch(y, fs=fs, window='hann', nperseg=len(y), noverlap=0,
+                       scaling='density')
+    asd_per = np.sqrt(Pxx)
+
+    ax.loglog(f_ref, asd_ref, lw=1.0, label=f"{det} Welch (32 s baseline)")
+    ax.loglog(f_per, asd_per, lw=1.2, ls="--", label=f"{det} Periodogram (±0.5 s)")
+
+ax.set_xlim(10, fs/2)
+ax.set_ylim(1e-24, 1e-20)
+ax.set_xlabel("Frequency [Hz]")
+ax.set_ylabel("ASD [strain / √Hz]")
+ax.legend(fontsize=8)
+ax.grid(True, which="both", ls=":")
+st.pyplot(fig, clear_figure=True)
+
+# ---------------------------------------------------------------------
+# --- 4. Spectrograms side by side
+st.header("4. Spectrograms (±0.5 s)")
+
+cols = st.columns(len(detectors))
+for i, det in enumerate(detectors):
+    if det not in strains:
+        continue
+    q = strains[det].q_transform(outseg=(t0 - t_window, t0 + t_window), qrange=qrange)
+    fig_q = q.plot(figsize=(5, 3))
+    ax = fig_q.gca()
+    fig_q.colorbar(label="Normalized energy", vmax=vmax, vmin=0)
+    ax.set_title(det)
+    ax.set_xlabel("Time [s]")
+    ax.set_yscale("log")
+    ax.set_ylim(bottom=15)
+    ax.grid(False)
+    cols[i].pyplot(fig_q, clear_figure=True)
+
+st.markdown("---")
+st.markdown("Data from the [Gravitational-Wave Open Science Center](https://gwosc.org).")
